@@ -1,0 +1,32 @@
+# Ignore the virtual environment (your env is named hello)
+hello/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+
+# Ignore API keys and credentials
+.env
+
+# Ignore generated audio files
+*.mp3
+output.mp3
+response.mp3
+
+# Ignore ngrok executable and logs
+ngrok.exe
+ngrok.log
+
+# Ignore VS Code settings (if using VS Code)
+.vscode/
+
+# Ignore dependency management files (optional)
+Pipfile
+Pipfile.lock
+requirements.txt
+
+# Ignore logs and temp files
+*.log
