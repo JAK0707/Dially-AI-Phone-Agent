@@ -5,6 +5,9 @@ import requests
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
+from time import sleep
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +27,19 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 os.makedirs("static", exist_ok=True)  # Ensure static directory exists
+
+def setup_requests_session():
+    """Sets up a requests session with retry logic"""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[404, 500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 @app.route("/")
 def home():
@@ -64,12 +80,17 @@ def process_recording():
     """Processes the recorded call and generates AI response"""
     response = VoiceResponse()
     recording_url = request.form.get("RecordingUrl")
+    recording_sid = request.form.get("RecordingSid")
 
     if not recording_url:
         response.say("Sorry, I did not receive any audio. Please try again.")
         return str(response)
 
     print(f"📞 Received Recording URL: {recording_url}")
+    print(f"Recording SID: {recording_sid}")
+
+    # Add a small delay to allow Twilio to process the recording
+    sleep(2)
 
     # Get the transcript
     transcript = transcribe_audio(recording_url)
@@ -115,49 +136,58 @@ def transcribe_audio(audio_url):
         return "Error: No audio URL provided"
 
     try:
-        # Modify the URL to request WAV format
-        if not audio_url.endswith('.wav'):
-            audio_url = f"{audio_url}.wav"
+        # Remove .wav extension if present (we'll handle format in the request)
+        audio_url = audio_url.replace('.wav', '')
         
         print(f"Attempting to download audio from: {audio_url}")
-        print(f"Using Twilio credentials - SID: {TWILIO_ACCOUNT_SID[:6]}...")  # Print first 6 chars for verification
+        print(f"Using Twilio credentials - SID: {TWILIO_ACCOUNT_SID[:6]}...")
 
-        # Download the audio using Twilio authentication
-        audio_response = requests.get(
-            audio_url,
-            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
-            headers={'Accept': 'audio/wav'}
-        )
-        
-        print(f"Audio download status code: {audio_response.status_code}")
-        print(f"Audio download headers: {audio_response.headers}")
-        
-        if audio_response.status_code != 200:
-            print(f"Full error response: {audio_response.text}")
-            return f"Error downloading audio: {audio_response.status_code}"
+        # Create session with retry logic
+        session = setup_requests_session()
 
-        # Send to Deepgram for transcription
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/wav"
-        }
+        # Try different formats and wait for recording to be ready
+        formats = ['', '.wav', '.mp3']
+        max_attempts = 3
         
-        print("Sending to Deepgram...")
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen",
-            headers=headers,
-            data=audio_response.content
-        )
+        for attempt in range(max_attempts):
+            for format_ext in formats:
+                try:
+                    url = f"{audio_url}{format_ext}"
+                    print(f"Attempting download with URL: {url}, Attempt {attempt + 1}")
+                    
+                    audio_response = session.get(
+                        url,
+                        auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+                        headers={'Accept': 'audio/*'}
+                    )
+                    
+                    if audio_response.status_code == 200:
+                        print("Successfully downloaded audio")
+                        # Send to Deepgram for transcription
+                        headers = {
+                            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                            "Content-Type": "audio/wav"
+                        }
+                        
+                        print("Sending to Deepgram...")
+                        response = requests.post(
+                            "https://api.deepgram.com/v1/listen",
+                            headers=headers,
+                            data=audio_response.content
+                        )
 
-        print(f"Deepgram status code: {response.status_code}")
-        
-        if response.status_code == 200:
-            transcription = response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
-            print(f"Transcription successful: {transcription}")
-            return transcription
-        else:
-            print(f"Deepgram error response: {response.text}")
-            return f"Deepgram Error: {response.text}"
+                        if response.status_code == 200:
+                            transcription = response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+                            print(f"Transcription successful: {transcription}")
+                            return transcription
+                        
+                except Exception as e:
+                    print(f"Attempt {attempt + 1} failed with format {format_ext}: {str(e)}")
+                    
+            print(f"Waiting before retry {attempt + 1}")
+            sleep(2)  # Wait 2 seconds before next attempt
+            
+        return "Error: Unable to access recording after multiple attempts"
             
     except Exception as e:
         print(f"Detailed transcription error: {str(e)}")
