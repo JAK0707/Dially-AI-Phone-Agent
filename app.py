@@ -63,16 +63,27 @@ def process_recording():
     return str(response)
 
 def transcribe_audio(audio_url):
-    """Converts spoken audio into text using Deepgram."""
-    headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "application/json"}
-    data = {"url": audio_url}
-
-    response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, json=data)
+    """Converts spoken audio into text using Deepgram with Twilio Authentication."""
     
-    if response.status_code == 200:
-        return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+    # Twilio Credentials (needed to access the recording)
+    TWILIO_SID = os.getenv("TWILIO_SID")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+    # Ensure Twilio authentication is included in the URL request
+    response = requests.get(audio_url, auth=(TWILIO_SID, TWILIO_AUTH_TOKEN))
+    
+    if response.status_code != 200:
+        return f"Twilio Error: Unable to fetch recording. Status Code: {response.status_code}"
+
+    # Send the audio to Deepgram for transcription
+    headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
+    deepgram_response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=response.content)
+
+    if deepgram_response.status_code == 200:
+        return deepgram_response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
     else:
-        return f"Deepgram Error: {response.text}"
+        return f"Deepgram Error: {deepgram_response.text}"
+
 
 def generate_response(user_input):
     """Generates AI response using Google's Gemini AI."""
