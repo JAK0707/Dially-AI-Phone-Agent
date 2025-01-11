@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 from twilio.twiml.voice_response import VoiceResponse
+from twilio.rest import Client
 import requests
 import os
 from dotenv import load_dotenv
@@ -8,9 +9,15 @@ import google.generativeai as genai
 # Load environment variables
 load_dotenv()
 
+# API Keys and Credentials
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+# Initialize Twilio Client
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # Configure Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
@@ -34,13 +41,22 @@ def handle_call():
     response.pause(length=1)
     response.say("Hello! Please speak after the beep, and I will respond.")
     response.record(
-        timeout=5,
+        timeout=10,  # Increased timeout
         transcribe=False,
         play_beep=True,
         action="/process_recording",
-        maxLength=30
+        maxLength=30,
+        trim='trim-silence',
+        recordingStatusCallback='/recording_status'
     )
     return str(response)
+
+@app.route("/recording_status", methods=['POST'])
+def recording_status():
+    """Handle recording status callbacks"""
+    status = request.form.get('RecordingStatus')
+    print(f"Recording Status: {status}")
+    return "OK"
 
 @app.route("/process_recording", methods=["POST"])
 def process_recording():
@@ -77,6 +93,19 @@ def process_recording():
     else:
         response.say(ai_response)
 
+    # Add an option to record another message
+    response.pause(length=2)
+    response.say("You can speak again after the beep for another question.")
+    response.record(
+        timeout=10,
+        transcribe=False,
+        play_beep=True,
+        action="/process_recording",
+        maxLength=30,
+        trim='trim-silence',
+        recordingStatusCallback='/recording_status'
+    )
+
     return str(response)
 
 def transcribe_audio(audio_url):
@@ -85,8 +114,12 @@ def transcribe_audio(audio_url):
         return "Error: No audio URL provided"
 
     try:
-        # Download the audio from Twilio's URL
-        audio_response = requests.get(audio_url)
+        # Download the audio using Twilio authentication
+        audio_response = requests.get(
+            audio_url,
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        )
+        
         if audio_response.status_code != 200:
             return f"Error downloading audio: {audio_response.status_code}"
 
@@ -108,6 +141,7 @@ def transcribe_audio(audio_url):
             return f"Deepgram Error: {response.text}"
             
     except Exception as e:
+        print(f"Transcription error: {str(e)}")  # Added logging
         return f"Transcription Error: {str(e)}"
 
 def generate_response(user_input):
@@ -116,11 +150,12 @@ def generate_response(user_input):
         model = genai.GenerativeModel("gemini-pro")
         prompt = f"""You are a helpful AI phone assistant. 
         Respond to the following user input concisely and naturally: {user_input}
-        Keep your response under 100 words."""
+        Keep your response under 100 words and maintain a conversational tone."""
         
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
+        print(f"Generation error: {str(e)}")  # Added logging
         return f"Sorry, I encountered an error: {str(e)}"
 
 def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
@@ -150,9 +185,11 @@ def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
                 f.write(response.content)
             return output_file
         else:
+            print(f"TTS error: {response.text}")  # Added logging
             return f"TTS Error: {response.text}"
             
     except Exception as e:
+        print(f"TTS error: {str(e)}")  # Added logging
         return f"TTS Error: {str(e)}"
 
 if __name__ == "__main__":
