@@ -1,0 +1,8 @@
+Flask
+twilio
+requests
+python-dotenv
+google-generativeai
+deepgram-sdk
+elevenlabs
+gunicorn

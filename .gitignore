@@ -26,7 +26,6 @@ ngrok.log
 # Ignore dependency management files (optional)
 Pipfile
 Pipfile.lock
-requirements.txt
 
 # Ignore logs and temp files
 *.log
