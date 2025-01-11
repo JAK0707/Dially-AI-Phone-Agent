@@ -102,7 +102,7 @@ def generate_response(user_input):
     response = model.generate_content(user_input)
     return response.text
 
-def text_to_speech(text, voice_id="21m00Tcm4TlvDq8ikWAM", output_file="response.mp3"):
+def text_to_speech(text, voice_id="ErXwobaYiN019PkySvjV", output_file="response.mp3"):
     """Converts text to speech using ElevenLabs API."""
     API_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
