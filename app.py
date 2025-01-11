@@ -50,11 +50,12 @@ def process_recording():
     speech_file = text_to_speech(ai_response)
 
     if speech_file:
-        response.play(speech_file)
+        response.play(f"https://encode-2025.onrender.com/static/response.mp3")  # Serve static MP3
     else:
         response.say(ai_response)
 
     return str(response)
+
 
 @app.route("/test_tts", methods=["POST"])
 def test_tts():
@@ -102,14 +103,14 @@ def generate_response(user_input):
     response = model.generate_content(user_input)
     return response.text
 
-def text_to_speech(text, voice_id="ErXwobaYiN019PkySvjV", output_file="response.mp3"):
-    """Converts text to speech using ElevenLabs API."""
+def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL", output_file="static/response.mp3"):
+    """Converts text to speech using ElevenLabs API and saves it in /static/."""
+    
     API_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json"
     }
-
     payload = {
         "text": text,
         "voice_settings": {"stability": 0.5, "similarity_boost": 0.5},
@@ -119,11 +120,14 @@ def text_to_speech(text, voice_id="ErXwobaYiN019PkySvjV", output_file="response.
     response = requests.post(API_URL, json=payload, headers=headers)
 
     if response.status_code == 200:
+        # Save the audio file in a persistent location (static folder)
+        os.makedirs("static", exist_ok=True)  # Ensure the static folder exists
         with open(output_file, "wb") as f:
             f.write(response.content)
-        return output_file
+        return output_file  # Return the path to the file
     else:
         return f"TTS Error: {response.text}"
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
