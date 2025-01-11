@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from twilio.twiml.voice_response import VoiceResponse
 import requests
 import os
@@ -12,26 +12,39 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# Configure Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
+os.makedirs("static", exist_ok=True)  # Ensure static directory exists
 
 @app.route("/")
 def home():
     return "AI Phone Agent is Running! 🚀"
 
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """Serve static files (for audio playback)"""
+    return send_from_directory("static", filename)
+
 @app.route("/handle_call", methods=["POST"])
 def handle_call():
-    """Handles incoming Twilio calls, transcribes speech, generates AI response, and plays it back."""
+    """Handles incoming Twilio calls"""
     response = VoiceResponse()
     response.pause(length=1)
     response.say("Hello! Please speak after the beep, and I will respond.")
-    response.record(timeout=5, transcribe=False, play_beep=True, action="/process_recording")
+    response.record(
+        timeout=5,
+        transcribe=False,
+        play_beep=True,
+        action="/process_recording",
+        maxLength=30
+    )
     return str(response)
 
 @app.route("/process_recording", methods=["POST"])
 def process_recording():
-    """Processes the recorded call, transcribes it, generates AI response, and plays the response."""
+    """Processes the recorded call and generates AI response"""
     response = VoiceResponse()
     recording_url = request.form.get("RecordingUrl")
 
@@ -41,93 +54,107 @@ def process_recording():
 
     print(f"📞 Received Recording URL: {recording_url}")
 
+    # Get the transcript
     transcript = transcribe_audio(recording_url)
     print(f"📝 Transcribed Text: {transcript}")
 
+    if "Error" in transcript:
+        response.say("Sorry, I had trouble understanding that. Please try again.")
+        return str(response)
+
+    # Generate AI response
     ai_response = generate_response(transcript)
     print(f"🤖 AI Response: {ai_response}")
 
+    # Convert to speech
     speech_file = text_to_speech(ai_response)
 
-    if speech_file:
-        response.play(f"https://encode-2025.onrender.com/static/response.mp3")  # Serve static MP3
+    if speech_file and not "Error" in speech_file:
+        # Use the full URL for the audio file
+        base_url = request.url_root.rstrip('/')
+        audio_url = f"{base_url}/{speech_file}"
+        response.play(audio_url)
     else:
         response.say(ai_response)
 
     return str(response)
 
-
-@app.route("/test_tts", methods=["POST"])
-def test_tts():
-    """Test Text-to-Speech (TTS) using ElevenLabs."""
-    data = request.json
-    text = data.get("text")
-
-    if not text:
-        return jsonify({"error": "No text provided"}), 400
-
-    speech_file = text_to_speech(text)
-
-    if "Error" in speech_file:
-        return jsonify({"error": speech_file}), 500
-
-    return jsonify({"message": "TTS success", "audio_file": speech_file})
-
 def transcribe_audio(audio_url):
-    """Handles both online and local audio files for transcription."""
-    if audio_url.startswith("file://") or os.path.exists(audio_url):
-        file_path = audio_url.replace("file://", "")
-        print(f"📂 Processing Local File: {file_path}")
+    """Transcribes audio from Twilio recording URL using Deepgram API"""
+    if not audio_url:
+        return "Error: No audio URL provided"
 
-        try:
-            with open(file_path, "rb") as audio_file:
-                audio_data = audio_file.read()
-        except FileNotFoundError:
-            return "Error: Audio file not found."
+    try:
+        # Download the audio from Twilio's URL
+        audio_response = requests.get(audio_url)
+        if audio_response.status_code != 200:
+            return f"Error downloading audio: {audio_response.status_code}"
 
-        headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
-        response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=audio_data)
-    
-    else:
-        headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
-        response = requests.get(audio_url, headers=headers)
+        # Send to Deepgram for transcription
+        headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": "audio/wav"
+        }
+        
+        response = requests.post(
+            "https://api.deepgram.com/v1/listen",
+            headers=headers,
+            data=audio_response.content
+        )
 
-    if response.status_code == 200:
-        return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
-    else:
-        return f"Deepgram Error: {response.text}"
+        if response.status_code == 200:
+            return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+        else:
+            return f"Deepgram Error: {response.text}"
+            
+    except Exception as e:
+        return f"Transcription Error: {str(e)}"
 
 def generate_response(user_input):
-    """Generates AI response using Google's Gemini AI."""
-    model = genai.GenerativeModel("gemini-pro")
-    response = model.generate_content(user_input)
-    return response.text
+    """Generates AI response using Gemini AI"""
+    try:
+        model = genai.GenerativeModel("gemini-pro")
+        prompt = f"""You are a helpful AI phone assistant. 
+        Respond to the following user input concisely and naturally: {user_input}
+        Keep your response under 100 words."""
+        
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Sorry, I encountered an error: {str(e)}"
 
-def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL", output_file="static/response.mp3"):
-    """Converts text to speech using ElevenLabs API and saves it in /static/."""
-    
-    API_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-    headers = {
-        "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "text": text,
-        "voice_settings": {"stability": 0.5, "similarity_boost": 0.5},
-        "model_id": "eleven_multilingual_v2"
-    }
+def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
+    """Converts text to speech using ElevenLabs API"""
+    try:
+        API_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        
+        headers = {
+            "xi-api-key": ELEVENLABS_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "text": text,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.5
+            },
+            "model_id": "eleven_multilingual_v2"
+        }
 
-    response = requests.post(API_URL, json=payload, headers=headers)
+        response = requests.post(API_URL, json=payload, headers=headers)
 
-    if response.status_code == 200:
-        # Save the audio file in a persistent location (static folder)
-        os.makedirs("static", exist_ok=True)  # Ensure the static folder exists
-        with open(output_file, "wb") as f:
-            f.write(response.content)
-        return output_file  # Return the path to the file
-    else:
-        return f"TTS Error: {response.text}"
-
+        if response.status_code == 200:
+            output_file = "static/response.mp3"
+            with open(output_file, "wb") as f:
+                f.write(response.content)
+            return output_file
+        else:
+            return f"TTS Error: {response.text}"
+            
+    except Exception as e:
+        return f"TTS Error: {str(e)}"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
