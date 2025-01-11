@@ -1,70 +1,42 @@
-import os
-import requests
 from flask import Flask, request
 from twilio.twiml.voice_response import VoiceResponse
-import google.generativeai as genai
+import requests
+import os
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
 
-# API Keys
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
-# Configure Google Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "AI Phone Agent is Running! 🚀"
-
 @app.route("/handle_call", methods=["POST"])
 def handle_call():
-    """Handles incoming Twilio calls and records immediately after the beep."""
+    """Handles incoming Twilio calls, transcribes speech, generates AI response, and plays it back."""
     response = VoiceResponse()
 
-    # Say the instructions and start recording immediately
+    # Ensure Twilio doesn't wait for user input
+    response.pause(length=1)
+
+    # Tell caller to start speaking
     response.say("Hello! Please speak after the beep, and I will respond.")
-    
-    # Start recording immediately with no delays
-    response.record(
-        timeout=5, 
-        transcribe=False, 
-        play_beep=True, 
-        recording_status_callback="/save_recording", 
-        trim="do-not-trim"  # Ensures no audio is cut off
-    )
+    response.record(timeout=5, transcribe=False, play_beep=True, action="/process_recording")
 
     return str(response)
 
-@app.route("/save_recording", methods=["POST"])
-def save_recording():
-    """Handles Twilio recording status callback."""
-    recording_url = request.form.get("RecordingUrl")
-
-    if not recording_url:
-        print("⚠️ No recording received.")
-        return "", 200
-
-    print(f"✅ Twilio Recording URL: {recording_url}")
-
-    # Process the recording
-    return process_recording(recording_url)
-
 @app.route("/process_recording", methods=["POST"])
-def process_recording(recording_url=None):
-    """Processes the recorded call, transcribes it, generates AI response, and plays it back."""
+def process_recording():
+    """Processes the recorded call, transcribes it, generates AI response, and plays the response."""
     response = VoiceResponse()
 
-    # Get the recording URL from Twilio if not passed manually
-    if not recording_url:
-        recording_url = request.form.get("RecordingUrl")
+    # Extract Twilio Recording URL
+    recording_url = request.form.get("RecordingUrl")
 
     if not recording_url:
         response.say("Sorry, I did not receive any audio. Please try again.")
@@ -91,15 +63,19 @@ def process_recording(recording_url=None):
     return str(response)
 
 def transcribe_audio(audio_url):
-    """Fetches the Twilio recording with authentication and transcribes it using Deepgram."""
+    """Converts spoken audio into text using Deepgram with Twilio Authentication."""
+    
+    # Twilio Credentials (needed to access the recording)
+    TWILIO_SID = os.getenv("TWILIO_SID")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
-    # Authenticate request to Twilio to fetch the recording
+    # Ensure Twilio authentication is included in the URL request
     response = requests.get(audio_url, auth=(TWILIO_SID, TWILIO_AUTH_TOKEN))
-
+    
     if response.status_code != 200:
         return f"Twilio Error: Unable to fetch recording. Status Code: {response.status_code}"
 
-    # Send the Twilio recording data to Deepgram for transcription
+    # Send the audio to Deepgram for transcription
     headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
     deepgram_response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=response.content)
 
@@ -107,6 +83,7 @@ def transcribe_audio(audio_url):
         return deepgram_response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
     else:
         return f"Deepgram Error: {deepgram_response.text}"
+
 
 def generate_response(user_input):
     """Generates AI response using Google's Gemini AI."""
