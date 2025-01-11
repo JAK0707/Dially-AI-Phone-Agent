@@ -41,13 +41,14 @@ def handle_call():
     response.pause(length=1)
     response.say("Hello! Please speak after the beep, and I will respond.")
     response.record(
-        timeout=10,  # Increased timeout
+        timeout=10,
         transcribe=False,
         play_beep=True,
         action="/process_recording",
         maxLength=30,
         trim='trim-silence',
-        recordingStatusCallback='/recording_status'
+        recordingStatusCallback='/recording_status',
+        recordingFormat='wav'  # Explicitly request WAV format
     )
     return str(response)
 
@@ -114,13 +115,25 @@ def transcribe_audio(audio_url):
         return "Error: No audio URL provided"
 
     try:
+        # Modify the URL to request WAV format
+        if not audio_url.endswith('.wav'):
+            audio_url = f"{audio_url}.wav"
+        
+        print(f"Attempting to download audio from: {audio_url}")
+        print(f"Using Twilio credentials - SID: {TWILIO_ACCOUNT_SID[:6]}...")  # Print first 6 chars for verification
+
         # Download the audio using Twilio authentication
         audio_response = requests.get(
             audio_url,
-            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            headers={'Accept': 'audio/wav'}
         )
         
+        print(f"Audio download status code: {audio_response.status_code}")
+        print(f"Audio download headers: {audio_response.headers}")
+        
         if audio_response.status_code != 200:
+            print(f"Full error response: {audio_response.text}")
             return f"Error downloading audio: {audio_response.status_code}"
 
         # Send to Deepgram for transcription
@@ -129,19 +142,25 @@ def transcribe_audio(audio_url):
             "Content-Type": "audio/wav"
         }
         
+        print("Sending to Deepgram...")
         response = requests.post(
             "https://api.deepgram.com/v1/listen",
             headers=headers,
             data=audio_response.content
         )
 
+        print(f"Deepgram status code: {response.status_code}")
+        
         if response.status_code == 200:
-            return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+            transcription = response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+            print(f"Transcription successful: {transcription}")
+            return transcription
         else:
+            print(f"Deepgram error response: {response.text}")
             return f"Deepgram Error: {response.text}"
             
     except Exception as e:
-        print(f"Transcription error: {str(e)}")  # Added logging
+        print(f"Detailed transcription error: {str(e)}")
         return f"Transcription Error: {str(e)}"
 
 def generate_response(user_input):
