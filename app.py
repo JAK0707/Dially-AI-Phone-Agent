@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from twilio.twiml.voice_response import VoiceResponse
 import requests
 import os
@@ -16,26 +16,23 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 
+@app.route("/")
+def home():
+    return "AI Phone Agent is Running! 🚀"
+
 @app.route("/handle_call", methods=["POST"])
 def handle_call():
     """Handles incoming Twilio calls, transcribes speech, generates AI response, and plays it back."""
     response = VoiceResponse()
-
-    # Ensure Twilio doesn't wait for user input
     response.pause(length=1)
-
-    # Tell caller to start speaking
     response.say("Hello! Please speak after the beep, and I will respond.")
     response.record(timeout=5, transcribe=False, play_beep=True, action="/process_recording")
-
     return str(response)
 
 @app.route("/process_recording", methods=["POST"])
 def process_recording():
     """Processes the recorded call, transcribes it, generates AI response, and plays the response."""
     response = VoiceResponse()
-
-    # Extract Twilio Recording URL
     recording_url = request.form.get("RecordingUrl")
 
     if not recording_url:
@@ -44,15 +41,12 @@ def process_recording():
 
     print(f"📞 Received Recording URL: {recording_url}")
 
-    # Convert speech to text (STT - Deepgram)
     transcript = transcribe_audio(recording_url)
     print(f"📝 Transcribed Text: {transcript}")
 
-    # Generate AI response (NLP - Google Gemini)
     ai_response = generate_response(transcript)
     print(f"🤖 AI Response: {ai_response}")
 
-    # Convert AI response to speech (TTS - ElevenLabs)
     speech_file = text_to_speech(ai_response)
 
     if speech_file:
@@ -62,28 +56,45 @@ def process_recording():
 
     return str(response)
 
+@app.route("/test_tts", methods=["POST"])
+def test_tts():
+    """Test Text-to-Speech (TTS) using ElevenLabs."""
+    data = request.json
+    text = data.get("text")
+
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+
+    speech_file = text_to_speech(text)
+
+    if "Error" in speech_file:
+        return jsonify({"error": speech_file}), 500
+
+    return jsonify({"message": "TTS success", "audio_file": speech_file})
+
 def transcribe_audio(audio_url):
-    """Converts spoken audio into text using Deepgram with Twilio Authentication."""
+    """Handles both online and local audio files for transcription."""
+    if audio_url.startswith("file://") or os.path.exists(audio_url):
+        file_path = audio_url.replace("file://", "")
+        print(f"📂 Processing Local File: {file_path}")
+
+        try:
+            with open(file_path, "rb") as audio_file:
+                audio_data = audio_file.read()
+        except FileNotFoundError:
+            return "Error: Audio file not found."
+
+        headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
+        response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=audio_data)
     
-    # Twilio Credentials (needed to access the recording)
-    TWILIO_SID = os.getenv("TWILIO_SID")
-    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-
-    # Ensure Twilio authentication is included in the URL request
-    response = requests.get(audio_url, auth=(TWILIO_SID, TWILIO_AUTH_TOKEN))
-    
-    if response.status_code != 200:
-        return f"Twilio Error: Unable to fetch recording. Status Code: {response.status_code}"
-
-    # Send the audio to Deepgram for transcription
-    headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
-    deepgram_response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=response.content)
-
-    if deepgram_response.status_code == 200:
-        return deepgram_response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
     else:
-        return f"Deepgram Error: {deepgram_response.text}"
+        headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"}
+        response = requests.get(audio_url, headers=headers)
 
+    if response.status_code == 200:
+        return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+    else:
+        return f"Deepgram Error: {response.text}"
 
 def generate_response(user_input):
     """Generates AI response using Google's Gemini AI."""
