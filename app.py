@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, Response, send_from_directory
 import requests
 import os
 from dotenv import load_dotenv
@@ -32,20 +32,20 @@ def serve_static(filename):
     """Serve static files (for audio playback)"""
     return send_from_directory("static", filename)
 
-@app.route("/handle_call", methods=["POST"])
+@app.route("/handle_call", methods=["GET", "POST"])
 def handle_call():
     """
     Handles incoming Exotel calls.
-    Exotel will send `CallSid`, `From`, `To`, `RecordingUrl`, `Status`
+    Exotel will send `CallSid`, `From`, `To`, `Direction`, `RecordingUrl`
     """
-    call_sid = request.form.get("CallSid")
-    caller_number = request.form.get("From")
-    recording_url = request.form.get("RecordingUrl")
-    status = request.form.get("Status")
+    call_sid = request.args.get("CallSid", "Unknown")
+    caller_number = request.args.get("From", "Unknown")
+    recording_url = request.args.get("RecordingUrl", None)
+    status = request.args.get("CallType", "Unknown")
 
     print(f"📞 Incoming Call - Caller: {caller_number}, Status: {status}")
-    
-    if status == "completed" and recording_url:
+
+    if recording_url:
         print(f"🎤 Received Recording: {recording_url}")
 
         # Transcribe the audio
