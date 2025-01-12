@@ -1,9 +1,13 @@
-from flask import Flask, request, jsonify, Response, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
+from twilio.twiml.voice_response import VoiceResponse
+from twilio.rest import Client
 import requests
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 from time import sleep
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 # Load environment variables
 load_dotenv()
@@ -12,10 +16,11 @@ load_dotenv()
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-EXOTEL_SID = os.getenv("EXOTEL_SID")
-EXOTEL_API_KEY = os.getenv("EXOTEL_API_KEY")
-EXOTEL_API_TOKEN = os.getenv("EXOTEL_API_TOKEN")
-EXOTEL_PHONE_NUMBER = os.getenv("EXOTEL_PHONE_NUMBER")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+# Initialize Twilio Client
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # Configure Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
@@ -23,82 +28,169 @@ genai.configure(api_key=GEMINI_API_KEY)
 app = Flask(__name__)
 os.makedirs("static", exist_ok=True)  # Ensure static directory exists
 
+def setup_requests_session():
+    """Sets up a requests session with retry logic"""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[404, 500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
 @app.route("/")
 def home():
-    return "AI Phone Agent (Exotel) is Running! 🚀"
+    return "AI Phone Agent is Running! 🚀"
 
 @app.route("/static/<path:filename>")
 def serve_static(filename):
     """Serve static files (for audio playback)"""
     return send_from_directory("static", filename)
 
-@app.route("/handle_call", methods=["GET", "POST"])
+@app.route("/handle_call", methods=["POST"])
 def handle_call():
-    """
-    Handles incoming Exotel calls.
-    Exotel will send `CallSid`, `From`, `To`, `Direction`, `RecordingUrl`
-    """
-    call_sid = request.args.get("CallSid", "Unknown")
-    caller_number = request.args.get("From", "Unknown")
-    recording_url = request.args.get("RecordingUrl", None)
-    status = request.args.get("CallType", "Unknown")
+    """Handles incoming Twilio calls"""
+    response = VoiceResponse()
+    response.pause(length=1)
+    response.say("Hello! Please speak after the beep, and I will respond.")
+    response.record(
+        timeout=10,
+        transcribe=False,
+        play_beep=True,
+        action="/process_recording",
+        maxLength=30,
+        trim='trim-silence',
+        recordingStatusCallback='/recording_status',
+        recordingFormat='wav'  # Explicitly request WAV format
+    )
+    return str(response)
 
-    print(f"📞 Incoming Call - Caller: {caller_number}, Status: {status}")
+@app.route("/recording_status", methods=['POST'])
+def recording_status():
+    """Handle recording status callbacks"""
+    status = request.form.get('RecordingStatus')
+    print(f"Recording Status: {status}")
+    return "OK"
 
-    if recording_url:
-        print(f"🎤 Received Recording: {recording_url}")
+@app.route("/process_recording", methods=["POST"])
+def process_recording():
+    """Processes the recorded call and generates AI response"""
+    response = VoiceResponse()
+    recording_url = request.form.get("RecordingUrl")
+    recording_sid = request.form.get("RecordingSid")
 
-        # Transcribe the audio
-        transcript = transcribe_audio(recording_url)
-        print(f"📝 Transcribed Text: {transcript}")
+    if not recording_url:
+        response.say("Sorry, I did not receive any audio. Please try again.")
+        return str(response)
 
-        if "Error" in transcript:
-            return generate_exotel_xml("Sorry, I had trouble understanding that. Please try again.")
+    print(f"📞 Received Recording URL: {recording_url}")
+    print(f"Recording SID: {recording_sid}")
 
-        # Generate AI response
-        ai_response = generate_response(transcript)
-        print(f"🤖 AI Response: {ai_response}")
+    # Add a small delay to allow Twilio to process the recording
+    sleep(2)
 
-        # Convert to speech
-        speech_file = text_to_speech(ai_response)
+    # Get the transcript
+    transcript = transcribe_audio(recording_url)
+    print(f"📝 Transcribed Text: {transcript}")
 
-        if speech_file and not "Error" in speech_file:
-            return generate_exotel_xml(f"{request.url_root}{speech_file}")
-        else:
-            return generate_exotel_xml(ai_response)
+    if "Error" in transcript:
+        response.say("Sorry, I had trouble understanding that. Please try again.")
+        return str(response)
 
-    return generate_exotel_xml("Hello! Please speak after the beep, and I will respond.")
+    # Generate AI response
+    ai_response = generate_response(transcript)
+    print(f"🤖 AI Response: {ai_response}")
 
-def generate_exotel_xml(message):
-    """Generates XML response for Exotel"""
-    xml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-        <Say>{message}</Say>
-    </Response>"""
-    return Response(xml_response, mimetype="text/xml")
+    # Convert to speech
+    speech_file = text_to_speech(ai_response)
+
+    if speech_file and not "Error" in speech_file:
+        # Use the full URL for the audio file
+        base_url = request.url_root.rstrip('/')
+        audio_url = f"{base_url}/{speech_file}"
+        response.play(audio_url)
+    else:
+        response.say(ai_response)
+
+    # Add an option to record another message
+    response.pause(length=2)
+    response.say("You can speak again after the beep for another question.")
+    response.record(
+        timeout=10,
+        transcribe=False,
+        play_beep=True,
+        action="/process_recording",
+        maxLength=30,
+        trim='trim-silence',
+        recordingStatusCallback='/recording_status'
+    )
+
+    return str(response)
 
 def transcribe_audio(audio_url):
-    """Transcribes audio using Deepgram API"""
+    """Transcribes audio from Twilio recording URL using Deepgram API"""
     if not audio_url:
         return "Error: No audio URL provided"
 
     try:
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/wav"
-        }
-
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen",
-            headers=headers,
-            data=requests.get(audio_url).content
-        )
-
-        if response.status_code == 200:
-            return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+        # Remove .wav extension if present (we'll handle format in the request)
+        audio_url = audio_url.replace('.wav', '')
         
-        return "Error: Failed to transcribe"
+        print(f"Attempting to download audio from: {audio_url}")
+        print(f"Using Twilio credentials - SID: {TWILIO_ACCOUNT_SID[:6]}...")
+
+        # Create session with retry logic
+        session = setup_requests_session()
+
+        # Try different formats and wait for recording to be ready
+        formats = ['', '.wav', '.mp3']
+        max_attempts = 3
+        
+        for attempt in range(max_attempts):
+            for format_ext in formats:
+                try:
+                    url = f"{audio_url}{format_ext}"
+                    print(f"Attempting download with URL: {url}, Attempt {attempt + 1}")
+                    
+                    audio_response = session.get(
+                        url,
+                        auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+                        headers={'Accept': 'audio/*'}
+                    )
+                    
+                    if audio_response.status_code == 200:
+                        print("Successfully downloaded audio")
+                        # Send to Deepgram for transcription
+                        headers = {
+                            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                            "Content-Type": "audio/wav"
+                        }
+                        
+                        print("Sending to Deepgram...")
+                        response = requests.post(
+                            "https://api.deepgram.com/v1/listen",
+                            headers=headers,
+                            data=audio_response.content
+                        )
+
+                        if response.status_code == 200:
+                            transcription = response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+                            print(f"Transcription successful: {transcription}")
+                            return transcription
+                        
+                except Exception as e:
+                    print(f"Attempt {attempt + 1} failed with format {format_ext}: {str(e)}")
+                    
+            print(f"Waiting before retry {attempt + 1}")
+            sleep(2)  # Wait 2 seconds before next attempt
+            
+        return "Error: Unable to access recording after multiple attempts"
+            
     except Exception as e:
+        print(f"Detailed transcription error: {str(e)}")
         return f"Transcription Error: {str(e)}"
 
 def generate_response(user_input):
@@ -112,7 +204,8 @@ def generate_response(user_input):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"Error: {str(e)}"
+        print(f"Generation error: {str(e)}")  # Added logging
+        return f"Sorry, I encountered an error: {str(e)}"
 
 def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
     """Converts text to speech using ElevenLabs API"""
@@ -140,9 +233,13 @@ def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
             with open(output_file, "wb") as f:
                 f.write(response.content)
             return output_file
-        return f"Error: {response.text}"
+        else:
+            print(f"TTS error: {response.text}")  # Added logging
+            return f"TTS Error: {response.text}"
+            
     except Exception as e:
-        return f"Error: {str(e)}"
+        print(f"TTS error: {str(e)}")  # Added logging
+        return f"TTS Error: {str(e)}"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
