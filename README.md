@@ -1,6 +1,6 @@
 # EnCode-2025 - AI Phone Agent
 
-[![Tutorial Video](https://img.shields.io/badge/Watch-Tutorial-blue?style=for-the-badge&logo=youtube)](https://github.com/YOUR_GITHUB_USERNAME/EnCode-2025/blob/main/tutorial.mp4)
+[![Tutorial Video](https://img.shields.io/badge/Watch-Tutorial-blue?style=for-the-badge&logo=youtube)](https://github.com/JAK0707/EnCode-2025/blob/main/Tutorial.mp4)
 
 <video width="100%" controls>
   <source src="https://github.com/YOUR_GITHUB_USERNAME/EnCode-2025/blob/main/tutorial.mp4" type="video/mp4">
@@ -41,7 +41,7 @@ This project is an AI-powered phone agent that can handle incoming calls, transc
 _Add an image of the flowchart here:_
 
 ```
-![Flowchart](path_to_your_flowchart_image.png)
+![Flowchart](https://github.com/JAK0707/EnCode-2025/blob/main/flowchart.png)
 ```
 
 ---
@@ -64,7 +64,7 @@ _Add an image of the flowchart here:_
 
 ### 1️⃣ Clone the Repository
 ```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/EnCode-2025.git
+git clone https://github.com/JAK0707/EnCode-2025.git
 cd EnCode-2025
 ```
 
