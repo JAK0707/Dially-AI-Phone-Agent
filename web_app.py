@@ -1,13 +1,14 @@
 import streamlit as st
 import requests
 import os
-import sounddevice as sd
 import numpy as np
 import wave
 import tempfile
 from dotenv import load_dotenv
 import google.generativeai as genai
 import time
+from streamlit_webrtc import webrtc_streamer, AudioProcessorFactory
+import av
 
 # Load environment variables
 load_dotenv()
@@ -53,32 +54,30 @@ option = st.radio("Choose Input Method:", ["🎤 Live Recording", "📂 Upload F
 
 temp_audio_file = None
 
-if option == "🎤 Live Recording":
-    duration = st.slider("Select Recording Duration (seconds):", 3, 15, 5)
-    start_recording = st.button("🎙️ Start Recording")
-
-    if start_recording:
-        st.info("🔴 Recording... Speak now!")
-
-        fs = 44100
-        seconds = duration
-        recording = sd.rec(int(seconds * fs), samplerate=fs, channels=2, dtype=np.int16)
-        sd.wait()
-
+class AudioProcessor(AudioProcessorFactory):
+    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
+        audio = frame.to_ndarray()
         temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         with wave.open(temp_audio_file.name, "wb") as wf:
-            wf.setnchannels(2)
+            wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(fs)
-            wf.writeframes(recording.tobytes())
+            wf.setframerate(16000)
+            wf.writeframes(audio.tobytes())
+        return frame
 
-        st.success("✅ Recording complete! Processing your speech...")
+if option == "🎤 Live Recording":
+    webrtc_streamer(key="audio", audio_processor_factory=AudioProcessor)
+    st.success("✅ Recording complete! Processing your speech...")
 
 elif option == "📂 Upload File":
     uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
     if uploaded_file:
         temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        temp_audio_file.write(uploaded_file.read())
+        with wave.open(temp_audio_file.name, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(uploaded_file.read())
         st.success("✅ File uploaded successfully!")
 
 if temp_audio_file:
@@ -88,11 +87,11 @@ if temp_audio_file:
             "Content-Type": "audio/wav"
         }
         with open(file_path, "rb") as audio_file:
-            response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=audio_file)
+            response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, files={"file": audio_file})
         
         if response.status_code == 200:
-            return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
-        return "Error: Could not transcribe audio."
+            return response.json().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "Error: No transcription found.")
+        return f"Error: Could not transcribe audio. Status Code: {response.status_code}"
 
     transcript = transcribe_audio(temp_audio_file.name)
     st.write("📝 **Transcribed Text:**", transcript)
