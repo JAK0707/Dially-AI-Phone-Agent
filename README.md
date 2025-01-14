@@ -1,7 +1,6 @@
 # EnCode-2025 - AI Phone Agent
 
-[https://github.com/JAK0707/EnCode-2025/blob/01ee1a77421e9fec785ce947cd245872e43de222/Tutorial.mp4](https://github.com/user-attachments/assets/eedd7382-e516-4f41-81dc-cd5d583896b8
-)
+https://github.com/user-attachments/assets/7e001673-8f60-4fa3-a830-e908cf4369e5
 
 <video width="100%" controls>
   <source src="https://github.com/YOUR_GITHUB_USERNAME/EnCode-2025/blob/main/tutorial.mp4" type="video/mp4">
