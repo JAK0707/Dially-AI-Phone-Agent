@@ -104,12 +104,6 @@ Copy the **ngrok** URL and update your **Twilio webhook** settings.
 | `/recording_status` | POST   | Logs recording status updates |
 | `/static/<filename>`| GET    | Serves speech files          |
 
----
-
-## Future Enhancements
-- Improve real-time speech generation for ultra-low latency responses.
-- Enhance multi-call handling and queue management.
-- Explore fine-tuning AI responses based on context and caller history.
 
 ---
 
