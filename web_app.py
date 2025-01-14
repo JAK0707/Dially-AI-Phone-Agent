@@ -20,14 +20,37 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Configure Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Streamlit UI
-st.title("🎙️ AI Phone Agent")
-st.write("Talk live or upload an audio file, and the AI will respond!")
+# Streamlit UI Enhancements
+st.set_page_config(page_title="AI Phone Agent", page_icon="📞", layout="centered")
+
+st.markdown("""
+    <style>
+        .title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        .info {
+            text-align: center;
+            font-size: 18px;
+            color: #555;
+        }
+        .phone-number {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            color: #2E86C1;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("<p class='title'>📞 AI Phone Agent</p>", unsafe_allow_html=True)
+st.markdown("<p class='info'>Talk live or upload an audio file, and the AI will respond in real time!</p>", unsafe_allow_html=True)
+st.markdown("<p class='phone-number'>Call the AI Agent at: +1 575-577-7527</p>", unsafe_allow_html=True)
 
 # Option to upload an audio file or record live
-option = st.radio("Choose Input Method:", ["🎤 Live Recording", "📂 Upload File"])
+option = st.radio("Choose Input Method:", ["🎤 Live Recording", "📂 Upload File"], horizontal=True)
 
-# Temporary file to store audio
 temp_audio_file = None
 
 if option == "🎤 Live Recording":
@@ -35,15 +58,13 @@ if option == "🎤 Live Recording":
     start_recording = st.button("🎙️ Start Recording")
 
     if start_recording:
-        st.write("🔴 Recording... Speak now!")
+        st.info("🔴 Recording... Speak now!")
 
-        fs = 44100  # Sample rate
+        fs = 44100
         seconds = duration
-
         recording = sd.rec(int(seconds * fs), samplerate=fs, channels=2, dtype=np.int16)
-        sd.wait()  # Wait until recording is finished
+        sd.wait()
 
-        # Save the recording as a WAV file
         temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         with wave.open(temp_audio_file.name, "wb") as wf:
             wf.setnchannels(2)
@@ -60,9 +81,7 @@ elif option == "📂 Upload File":
         temp_audio_file.write(uploaded_file.read())
         st.success("✅ File uploaded successfully!")
 
-# Process the audio if available
 if temp_audio_file:
-    # Transcribe the audio using Deepgram API
     def transcribe_audio(file_path):
         headers = {
             "Authorization": f"Token {DEEPGRAM_API_KEY}",
@@ -78,7 +97,6 @@ if temp_audio_file:
     transcript = transcribe_audio(temp_audio_file.name)
     st.write("📝 **Transcribed Text:**", transcript)
 
-    # Generate AI response
     def generate_response(user_input):
         try:
             model = genai.GenerativeModel("gemini-pro")
@@ -91,9 +109,8 @@ if temp_audio_file:
     ai_response = generate_response(transcript)
     st.write("🤖 **AI Response:**", ai_response)
 
-    # Convert AI response to speech
     def text_to_speech(text):
-        API_URL = f"https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL"
+        API_URL = "https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL"
         headers = {
             "xi-api-key": ELEVENLABS_API_KEY,
             "Content-Type": "application/json"
@@ -118,4 +135,4 @@ if temp_audio_file:
         st.audio(audio_response_file, format="audio/mp3")
         st.download_button(label="⬇️ Download AI Response", data=open(audio_response_file, "rb"), file_name="ai_response.mp3")
 
-st.write("🔹 Speak again or upload another file to continue the conversation!")
+st.markdown("<p class='info'>🔹 Speak again, upload another file, or call the AI agent for a seamless conversation!</p>", unsafe_allow_html=True)
