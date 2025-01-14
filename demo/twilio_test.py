@@ -1,9 +1,15 @@
 from twilio.rest import Client
+import os
+from dotenv import load_dotenv
 
-TWILIO_SID = "AC7c43722a154dca5cfed13b8547682c8c"
-TWILIO_AUTH_TOKEN = "b77a135a9f699335c471283a27ccf84f"
-TWILIO_PHONE_NUMBER = "+16086056957"  # Your Twilio number
-TO_PHONE_NUMBER = "+918955045316"  # Your personal number
+# Load environment variables
+load_dotenv()
+
+# Twilio credentials
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+TO_PHONE_NUMBER = os.getenv("TO_PHONE_NUMBER")
 
 def make_call():
     """Places a test phone call via Twilio."""

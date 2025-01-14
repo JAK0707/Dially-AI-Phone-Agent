@@ -1,6 +1,11 @@
 import requests
+import os
+from dotenv import load_dotenv
 
-DEEPGRAM_API_KEY = "b77dc7018694e9cb0d170f8d1f2a931511e48c06"
+# Load environment variables
+load_dotenv()
+
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
 def transcribe_audio(audio_url):
     """Converts spoken audio from a call into text."""
