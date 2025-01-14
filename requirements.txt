@@ -9,8 +9,3 @@ gunicorn
 streamlit
 sounddevice
 numpy
-streamlit-webrtc
-wave
-
-
-
