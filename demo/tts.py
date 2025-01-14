@@ -11,7 +11,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 # ElevenLabs API URL
 API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
-def text_to_speech(text, voice_id="21m00Tcm4TlvDq8ikWAM", output_file="output.mp3"):
+def text_to_speech(text, voice_id="iWNf11sz1GrUE4ppxTOL", output_file="newoutput.mp3"):
     """Converts text to speech using ElevenLabs API."""
     
     headers = {

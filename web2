@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import sounddevice as sd
 import numpy as np
 import wave
 import tempfile
@@ -47,13 +48,38 @@ st.markdown("<p class='title'>📞 AI Phone Agent</p>", unsafe_allow_html=True)
 st.markdown("<p class='info'>Talk live or upload an audio file, and the AI will respond in real time!</p>", unsafe_allow_html=True)
 st.markdown("<p class='phone-number'>Call the AI Agent at: +1 575-577-7527</p>", unsafe_allow_html=True)
 
-# Option to upload an audio file
+# Option to upload an audio file or record live
+option = st.radio("Choose Input Method:", ["🎤 Live Recording", "📂 Upload File"], horizontal=True)
+
 temp_audio_file = None
-uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
-if uploaded_file:
-    temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    temp_audio_file.write(uploaded_file.read())
-    st.success("✅ File uploaded successfully!")
+
+if option == "🎤 Live Recording":
+    duration = st.slider("Select Recording Duration (seconds):", 3, 15, 5)
+    start_recording = st.button("🎙️ Start Recording")
+
+    if start_recording:
+        st.info("🔴 Recording... Speak now!")
+
+        fs = 44100
+        seconds = duration
+        recording = sd.rec(int(seconds * fs), samplerate=fs, channels=2, dtype=np.int16)
+        sd.wait()
+
+        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        with wave.open(temp_audio_file.name, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(2)
+            wf.setframerate(fs)
+            wf.writeframes(recording.tobytes())
+
+        st.success("✅ Recording complete! Processing your speech...")
+
+elif option == "📂 Upload File":
+    uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
+    if uploaded_file:
+        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        temp_audio_file.write(uploaded_file.read())
+        st.success("✅ File uploaded successfully!")
 
 if temp_audio_file:
     def transcribe_audio(file_path):
@@ -109,4 +135,4 @@ if temp_audio_file:
         st.audio(audio_response_file, format="audio/mp3")
         st.download_button(label="⬇️ Download AI Response", data=open(audio_response_file, "rb"), file_name="ai_response.mp3")
 
-st.markdown("<p class='info'>🔹 Upload another file, or call the AI agent for a seamless conversation!</p>", unsafe_allow_html=True)
+st.markdown("<p class='info'>🔹 Speak again, upload another file, or call the AI agent for a seamless conversation!</p>", unsafe_allow_html=True)
