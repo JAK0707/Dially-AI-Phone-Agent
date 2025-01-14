@@ -7,8 +7,6 @@ import tempfile
 from dotenv import load_dotenv
 import google.generativeai as genai
 import time
-from streamlit_webrtc import webrtc_streamer, AudioProcessorFactory
-import av
 
 # Load environment variables
 load_dotenv()
@@ -49,36 +47,13 @@ st.markdown("<p class='title'>📞 AI Phone Agent</p>", unsafe_allow_html=True)
 st.markdown("<p class='info'>Talk live or upload an audio file, and the AI will respond in real time!</p>", unsafe_allow_html=True)
 st.markdown("<p class='phone-number'>Call the AI Agent at: +1 575-577-7527</p>", unsafe_allow_html=True)
 
-# Option to upload an audio file or record live
-option = st.radio("Choose Input Method:", ["🎤 Live Recording", "📂 Upload File"], horizontal=True)
-
+# Option to upload an audio file
 temp_audio_file = None
-
-class AudioProcessor(AudioProcessorFactory):
-    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        audio = frame.to_ndarray()
-        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        with wave.open(temp_audio_file.name, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(16000)
-            wf.writeframes(audio.tobytes())
-        return frame
-
-if option == "🎤 Live Recording":
-    webrtc_streamer(key="audio", audio_processor_factory=AudioProcessor)
-    st.success("✅ Recording complete! Processing your speech...")
-
-elif option == "📂 Upload File":
-    uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
-    if uploaded_file:
-        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        with wave.open(temp_audio_file.name, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(16000)
-            wf.writeframes(uploaded_file.read())
-        st.success("✅ File uploaded successfully!")
+uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
+if uploaded_file:
+    temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    temp_audio_file.write(uploaded_file.read())
+    st.success("✅ File uploaded successfully!")
 
 if temp_audio_file:
     def transcribe_audio(file_path):
@@ -87,11 +62,11 @@ if temp_audio_file:
             "Content-Type": "audio/wav"
         }
         with open(file_path, "rb") as audio_file:
-            response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, files={"file": audio_file})
+            response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, data=audio_file)
         
         if response.status_code == 200:
-            return response.json().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "Error: No transcription found.")
-        return f"Error: Could not transcribe audio. Status Code: {response.status_code}"
+            return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+        return "Error: Could not transcribe audio."
 
     transcript = transcribe_audio(temp_audio_file.name)
     st.write("📝 **Transcribed Text:**", transcript)
@@ -134,4 +109,4 @@ if temp_audio_file:
         st.audio(audio_response_file, format="audio/mp3")
         st.download_button(label="⬇️ Download AI Response", data=open(audio_response_file, "rb"), file_name="ai_response.mp3")
 
-st.markdown("<p class='info'>🔹 Speak again, upload another file, or call the AI agent for a seamless conversation!</p>", unsafe_allow_html=True)
+st.markdown("<p class='info'>🔹 Upload another file, or call the AI agent for a seamless conversation!</p>", unsafe_allow_html=True)
