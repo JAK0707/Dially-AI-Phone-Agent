@@ -6,3 +6,6 @@ google-generativeai
 deepgram-sdk
 elevenlabs
 gunicorn
+streamlit
+sounddevice
+numpy
