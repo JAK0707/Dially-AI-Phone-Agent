@@ -47,10 +47,10 @@ This project is an AI-powered phone agent that can handle incoming calls, transc
 
 | Component          | Technology Used        |
 |--------------------|-----------------------|
-| Call Handling     | Twilio Voice API       |
-| Speech-to-Text    | Deepgram API          |
+| Call Handling     | Twilio Voice           |
+| Speech-to-Text    | Deepgram               |
 | AI Responses      | Google Gemini         |
-| Text-to-Speech    | ElevenLabs API        |
+| Text-to-Speech    | ElevenLabs            |
 | Web Framework     | Flask                 |
 | Error Handling    | Requests Retry Logic  |
 | Deployment        | Render                |
