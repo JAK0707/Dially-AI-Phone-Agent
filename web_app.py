@@ -8,18 +8,18 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import time
 
-# Load environment variables
+
 load_dotenv()
 
-# API Keys
+
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Gemini AI
+
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Streamlit UI Enhancements
+
 st.set_page_config(page_title="AI Phone Agent", page_icon="📞", layout="centered")
 
 st.markdown("""
@@ -47,7 +47,7 @@ st.markdown("<p class='title'>📞 AI Phone Agent</p>", unsafe_allow_html=True)
 st.markdown("<p class='info'>Talk live or upload an audio file, and the AI will respond in real time!</p>", unsafe_allow_html=True)
 st.markdown("<p class='phone-number'>Call the AI Agent at: +1 575-577-7527</p>", unsafe_allow_html=True)
 
-# Option to upload an audio file
+
 temp_audio_file = None
 uploaded_file = st.file_uploader("Upload an audio file (WAV/MP3)", type=["wav", "mp3"])
 if uploaded_file:

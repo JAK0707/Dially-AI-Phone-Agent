@@ -9,24 +9,24 @@ from time import sleep
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# Load environment variables
+
 load_dotenv()
 
-# API Keys and Credentials
+
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
-# Initialize Twilio Client
+
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-# Configure Gemini AI
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
-os.makedirs("static", exist_ok=True)  # Ensure static directory exists
+os.makedirs("static", exist_ok=True)  
 
 def setup_requests_session():
     """Sets up a requests session with retry logic"""
@@ -64,7 +64,7 @@ def handle_call():
         maxLength=30,
         trim='trim-silence',
         recordingStatusCallback='/recording_status',
-        recordingFormat='wav'  # Explicitly request WAV format
+        recordingFormat='wav' 
     )
     return str(response)
 
@@ -89,10 +89,10 @@ def process_recording():
     print(f"📞 Received Recording URL: {recording_url}")
     print(f"Recording SID: {recording_sid}")
 
-    # Add a small delay to allow Twilio to process the recording
+    
     sleep(2)
 
-    # Get the transcript
+    
     transcript = transcribe_audio(recording_url)
     print(f"📝 Transcribed Text: {transcript}")
 
@@ -100,22 +100,22 @@ def process_recording():
         response.say("Sorry, I had trouble understanding that. Please try again.")
         return str(response)
 
-    # Generate AI response
+    
     ai_response = generate_response(transcript)
     print(f"🤖 AI Response: {ai_response}")
 
-    # Convert to speech
+    
     speech_file = text_to_speech(ai_response)
 
     if speech_file and not "Error" in speech_file:
-        # Use the full URL for the audio file
+        
         base_url = request.url_root.rstrip('/')
         audio_url = f"{base_url}/{speech_file}"
         response.play(audio_url)
     else:
         response.say(ai_response)
 
-    # Add an option to record another message
+    
     response.pause(length=2)
     response.say("You can speak again after the beep for another question.")
     response.record(
@@ -136,16 +136,16 @@ def transcribe_audio(audio_url):
         return "Error: No audio URL provided"
 
     try:
-        # Remove .wav extension if present (we'll handle format in the request)
+        
         audio_url = audio_url.replace('.wav', '')
         
         print(f"Attempting to download audio from: {audio_url}")
         print(f"Using Twilio credentials - SID: {TWILIO_ACCOUNT_SID[:6]}...")
 
-        # Create session with retry logic
+        
         session = setup_requests_session()
 
-        # Try different formats and wait for recording to be ready
+        
         formats = ['', '.wav', '.mp3']
         max_attempts = 3
         
@@ -185,7 +185,7 @@ def transcribe_audio(audio_url):
                     print(f"Attempt {attempt + 1} failed with format {format_ext}: {str(e)}")
                     
             print(f"Waiting before retry {attempt + 1}")
-            sleep(2)  # Wait 2 seconds before next attempt
+            sleep(2)  
             
         return "Error: Unable to access recording after multiple attempts"
             
@@ -234,11 +234,11 @@ def text_to_speech(text, voice_id="EXAVITQu4vr4xnSDxMaL"):
                 f.write(response.content)
             return output_file
         else:
-            print(f"TTS error: {response.text}")  # Added logging
+            print(f"TTS error: {response.text}")  
             return f"TTS Error: {response.text}"
             
     except Exception as e:
-        print(f"TTS error: {str(e)}")  # Added logging
+        print(f"TTS error: {str(e)}")  
         return f"TTS Error: {str(e)}"
 
 if __name__ == "__main__":

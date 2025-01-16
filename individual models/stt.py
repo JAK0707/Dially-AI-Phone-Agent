@@ -2,7 +2,7 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+
 load_dotenv()
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
@@ -15,5 +15,5 @@ def transcribe_audio(audio_url):
     response = requests.post("https://api.deepgram.com/v1/listen", headers=headers, json=data)
     return response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
 
-# Example Usage
+
 print(transcribe_audio("https://voiceage.com/wbsamples/in_mono/Adver.wav"))

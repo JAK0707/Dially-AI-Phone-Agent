@@ -2,13 +2,13 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+
 load_dotenv()
 
-# Get ElevenLabs API Key from .env
+
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
-# ElevenLabs API URL
+
 API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 def text_to_speech(text, voice_id="iWNf11sz1GrUE4ppxTOL", output_file="newoutput.mp3"):
@@ -36,5 +36,5 @@ def text_to_speech(text, voice_id="iWNf11sz1GrUE4ppxTOL", output_file="newoutput
         print(f"❌ Error: {response.status_code} - {response.text}")
         return None
 
-# Example Usage (Using Rachel's correct voice ID)
+
 text_to_speech("Hello I am Joe Biden", voice_id="EXAVITQu4vr4xnSDxMaL")
