@@ -55,7 +55,7 @@ def handle_call():
     """Handles incoming Twilio calls"""
     response = VoiceResponse()
     response.pause(length=1)
-    response.say("Hello! Please speak after the beep, and I will respond.")
+    response.say("Hello! Thank you for calling. I’m an AI agent created by Team Hello from Thapar University. How may I assist you?")
     response.record(
         timeout=10,
         transcribe=False,
