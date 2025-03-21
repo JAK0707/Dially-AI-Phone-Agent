@@ -196,7 +196,7 @@ def transcribe_audio(audio_url):
 def generate_response(user_input):
     """Generates AI response using Gemini AI"""
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
         prompt = f"""You are a helpful AI phone assistant. 
         Respond to the following user input concisely and naturally: {user_input}
         Keep your response under 100 words and maintain a conversational tone."""
