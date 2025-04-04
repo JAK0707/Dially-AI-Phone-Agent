@@ -1,4 +1,4 @@
-# EnCode-2025 - AI Phone Agent
+# Dially - AI Phone Agent
 
 https://github.com/user-attachments/assets/7e001673-8f60-4fa3-a830-e908cf4369e5
 
